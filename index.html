@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DashCam</title>
+<style>
+body { margin:0; font-family: Arial, sans-serif; background:#000; color:#fff; display:flex; flex-direction:column; height:100vh; position: relative;}
+video { width:100%; height:auto; flex:1; background:#111; }
+.controls { display:flex; gap:10px; padding:10px; background: rgba(0,0,0,0.7); position: absolute; bottom:0; width:100%; }
+button { flex:1; padding:14px; font-size:16px; border-radius:8px; border:none; cursor:pointer; }
+#startBtn { background:#28a745; color:white; }
+#saveBtn { background:#007bff; color:white; }
+</style>
+</head>
+<body>
+
+<video id="preview" autoplay playsinline muted></video>
+
+<div class="controls">
+  <button id="startBtn">Start Drive</button>
+  <button id="saveBtn">Save Last 5 Min</button>
+</div>
+
+<script>
+// DashCam with embedded overlay (date/time + speed)
+let stream, recorder;
+let buffer = [];
+const maxChunks = 60; // 5 min buffer with 5s chunks
+
+const preview = document.getElementById("preview");
+const startBtn = document.getElementById("startBtn");
+const saveBtn = document.getElementById("saveBtn");
+
+startBtn.textContent = "Start Drive";
+
+// Create canvas to overlay on video and capture it into recording
+const overlayCanvas = document.createElement("canvas");
+overlayCanvas.style.position="absolute";
+overlayCanvas.style.top="0";
+overlayCanvas.style.left="0";
+document.body.appendChild(overlayCanvas);
+const ctx = overlayCanvas.getContext("2d");
+
+function resizeCanvas() {
+    overlayCanvas.width = preview.videoWidth || window.innerWidth;
+    overlayCanvas.height = preview.videoHeight || window.innerHeight;
+}
+preview.addEventListener("loadedmetadata", resizeCanvas);
+window.addEventListener("resize", resizeCanvas);
+
+let lastPosition = null;
+let speedKmh = 0;
+
+// Inside drawOverlay(), also draw the video
+function drawOverlay() {
+    if (!preview.videoWidth) return requestAnimationFrame(drawOverlay);
+    // Draw the camera video first
+    ctx.drawImage(preview, 0, 0, overlayCanvas.width, overlayCanvas.height);
+
+    // Overlay date/time and speed
+    ctx.font = "20px Arial";
+    ctx.fillStyle = "yellow";
+    ctx.fillText(new Date().toLocaleString(), 10, 30);
+    ctx.fillText(`Speed: ${speedKmh.toFixed(1)} km/h`, 10, 60);
+
+    requestAnimationFrame(drawOverlay);
+}
+
+function watchSpeed() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.watchPosition((pos) => {
+        const { latitude, longitude, timestamp } = pos.coords;
+        const now = timestamp;
+        if(lastPosition){
+            const {lat, lon, time} = lastPosition;
+            const R=6371e3;
+            const φ1 = lat * Math.PI/180;
+            const φ2 = latitude * Math.PI/180;
+            const Δφ = (latitude - lat) * Math.PI/180;
+            const Δλ = (longitude - lon) * Math.PI/180;
+            const a = Math.sin(Δφ/2)*Math.sin(Δφ/2) + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)*Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = R * c;
+            const dt = (now - time)/1000;
+            if(dt>0) speedKmh = (distance/dt)*3.6;
+        }
+        lastPosition={lat:latitude, lon:longitude, time:now};
+    }, (err)=>console.warn(err), {enableHighAccuracy:true, maximumAge:1000, timeout:5000});
+}
+
+startBtn.addEventListener("click", async ()=>{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}, audio:false});
+    preview.srcObject = stream;
+    
+    drawOverlay();
+    watchSpeed();
+
+    // capture video + overlay
+    const combinedStream = overlayCanvas.captureStream(30);
+    stream.getTracks().forEach(track=>combinedStream.addTrack(track));
+
+    recorder = new MediaRecorder(combinedStream, {mimeType:"video/webm"});
+    recorder.ondataavailable = (e)=>{
+        if(e.data.size>0){
+            buffer.push(e.data);
+            if(buffer.length>maxChunks) buffer.shift();
+        }
+    };
+    recorder.start(5000);
+});
+
+saveBtn.addEventListener("click", ()=>{
+    if(buffer.length===0){ alert("No video recorded yet."); return; }
+    const blob = new Blob(buffer,{type:"video/webm"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dashcam_last5min_${new Date().toISOString()}.webm`;
+    a.click();
+});
+</script>
+
+</body>
+</html>
