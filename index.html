@@ -14,34 +14,66 @@
 <style>
 body {
   margin:0; background:#000; color:#fff; font-family:Arial;
-  display:flex; justify-content:center; align-items:center; height:100vh;
-  overflow:hidden;
+  display:flex; justify-content:center; align-items:center;
+  height:100vh; overflow:hidden;
+  position:relative;
 }
 
-#preview { width:100%; height:auto; display:none; background:#111; }
+/* Video stays behind UI */
+#preview {
+  position:absolute; top:0; left:0;
+  width:100%; height:auto;
+  display:none; background:#111;
+  z-index:1;
+}
+
+/* Overlay canvas (must be above video but under buttons) */
+canvas {
+  position:absolute;
+  top:0; left:0;
+  z-index:2;
+}
 
 /* Start Button */
 .center-start {
-  position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);
+  position:absolute;
+  top:50%; left:50%;
+  transform:translate(-50%, -50%);
+  z-index:3;  /* Above everything */
 }
+
 button {
-  padding:18px 26px; font-size:22px;
-  border:none; border-radius:12px; background:#28a745; color:#fff;
+  padding:18px 26px;
+  font-size:22px;
+  border:none;
+  border-radius:12px;
+  background:#28a745;
+  color:#fff;
   cursor:pointer;
 }
 
-/* Controls – moved higher + bigger */
+/* Controls row */
 .controls {
-  position:absolute; bottom:120px; width:100%; 
-  display:flex; gap:14px; justify-content:center;
+  position:absolute;
+  bottom:40px;               /* Always bottom */
+  left:50%;
+  transform:translateX(-50%);
+  width:90%;
+  display:flex;
+  justify-content:center;
+  gap:14px;
   display:none;
+  z-index:3;                 /* Above canvas */
 }
+
 .control-btn {
-  padding:20px 28px;        /* 50% bigger */
-  font-size:22px;           /* 50% bigger */
-  border-radius:14px; 
-  border:none; cursor:pointer;
+  padding:20px 28px;
+  font-size:22px;
+  border:none;
+  border-radius:14px;
+  cursor:pointer;
 }
+
 #saveBtn { background:#007bff; color:white; }
 #stopBtn { background:#dc3545; color:white; }
 </style>
@@ -72,10 +104,7 @@ let drawing = false;
 
 // Overlay canvas
 const overlayCanvas = document.createElement("canvas");
-overlayCanvas.style.position="absolute";
-overlayCanvas.style.top="0";
-overlayCanvas.style.left="0";
-overlayCanvas.style.display="none";   /* HIDDEN when stopped */
+overlayCanvas.style.display = "none";
 document.body.appendChild(overlayCanvas);
 
 const ctx = overlayCanvas.getContext("2d");
@@ -104,7 +133,7 @@ let lastPosition = null;
 let speedKmh = 0;
 
 function drawOverlay() {
-  if (!drawing) return; // stops when Stop button pressed
+  if (!drawing) return;
 
   ctx.drawImage(preview, 0, 0, overlayCanvas.width, overlayCanvas.height);
 
@@ -118,7 +147,6 @@ function drawOverlay() {
 
 function watchSpeed() {
   if (!navigator.geolocation) return;
-
   navigator.geolocation.watchPosition(
     (pos) => {
       const { latitude, longitude } = pos.coords;
@@ -130,7 +158,8 @@ function watchSpeed() {
         const dLat = toRad(latitude - lastPosition.lat);
         const dLon = toRad(longitude - lastPosition.lon);
 
-        const a = Math.sin(dLat/2)**2 +
+        const a =
+          Math.sin(dLat/2)**2 +
           Math.cos(toRad(lastPosition.lat)) *
           Math.cos(toRad(latitude)) *
           Math.sin(dLon/2)**2;
@@ -149,7 +178,6 @@ function watchSpeed() {
   );
 }
 
-// Main start logic with retry for iOS
 async function startRecording() {
   try {
     mimeType = pickMimeType();
@@ -163,7 +191,8 @@ async function startRecording() {
     preview.style.display = "block";
     startBtn.style.display = "none";
     controls.style.display = "flex";
-    overlayCanvas.style.display = "block"; 
+    overlayCanvas.style.display = "block";
+
     drawing = true;
     drawOverlay();
     watchSpeed();
@@ -209,10 +238,9 @@ saveBtn.addEventListener("click", () => {
 
 // Stop button
 stopBtn.addEventListener("click", () => {
-
-  drawing = false; // stop overlay animation
-  overlayCanvas.style.display = "none"; // hide overlay
-  speedKmh = 0; // reset speed
+  drawing = false;
+  overlayCanvas.style.display = "none";
+  speedKmh = 0;
 
   if (recorder) recorder.stop();
   if (stream) stream.getTracks().forEach(t => t.stop());
