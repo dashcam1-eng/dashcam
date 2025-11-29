@@ -3,28 +3,44 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>DashCam</title>
+
+<!-- Disable ALL caching -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 
 <style>
 body {
   margin:0; background:#000; color:#fff; font-family:Arial;
   display:flex; justify-content:center; align-items:center; height:100vh;
+  overflow:hidden;
 }
+
 #preview { width:100%; height:auto; display:none; background:#111; }
+
+/* Start Button */
 .center-start {
   position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);
 }
 button {
-  padding:14px 20px; font-size:18px; border:none; border-radius:10px;
-  background:#28a745; color:#fff; cursor:pointer;
+  padding:18px 26px; font-size:22px;
+  border:none; border-radius:12px; background:#28a745; color:#fff;
+  cursor:pointer;
 }
+
+/* Controls – moved higher + bigger */
 .controls {
-  position:absolute; bottom:20px; width:100%;
-  display:flex; gap:10px; justify-content:center;
+  position:absolute; bottom:120px; width:100%; 
+  display:flex; gap:14px; justify-content:center;
+  display:none;
 }
 .control-btn {
-  padding:12px 16px; font-size:16px;
-  border-radius:10px; border:none; cursor:pointer;
+  padding:20px 28px;        /* 50% bigger */
+  font-size:22px;           /* 50% bigger */
+  border-radius:14px; 
+  border:none; cursor:pointer;
 }
 #saveBtn { background:#007bff; color:white; }
 #stopBtn { background:#dc3545; color:white; }
@@ -33,13 +49,10 @@ button {
 
 <body>
 
-<!-- Start screen -->
 <button id="startBtn" class="center-start">Start</button>
-
 <video id="preview" autoplay playsinline muted></video>
 
-<!-- Controls appear ONLY after recording begins -->
-<div id="controls" class="controls" style="display:none;">
+<div id="controls" class="controls">
   <button id="saveBtn" class="control-btn">Save Video</button>
   <button id="stopBtn" class="control-btn">Stop</button>
 </div>
@@ -47,7 +60,7 @@ button {
 <script>
 let stream, recorder;
 let buffer = [];
-const maxChunks = 60; // last 5 minutes (5 sec chunks)
+const maxChunks = 60;
 const preview = document.getElementById("preview");
 const startBtn = document.getElementById("startBtn");
 const controls = document.getElementById("controls");
@@ -55,34 +68,34 @@ const saveBtn = document.getElementById("saveBtn");
 const stopBtn = document.getElementById("stopBtn");
 
 let mimeType = "";
+let drawing = false;
 
-// Create overlay canvas
+// Overlay canvas
 const overlayCanvas = document.createElement("canvas");
 overlayCanvas.style.position="absolute";
 overlayCanvas.style.top="0";
 overlayCanvas.style.left="0";
+overlayCanvas.style.display="none";   /* HIDDEN when stopped */
 document.body.appendChild(overlayCanvas);
+
 const ctx = overlayCanvas.getContext("2d");
 
 function pickMimeType() {
-    const options = [
-        "video/webm;codecs=vp9",
-        "video/webm;codecs=vp8",
-        "video/webm",
-        "video/mp4;codecs=avc1.42E01E,mp4a.40.2"
-    ];
-
-    for (let type of options) {
-        if (MediaRecorder.isTypeSupported(type)) {
-            return type;
-        }
-    }
-    return "video/webm"; // fallback
+  const options = [
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm",
+    "video/mp4"
+  ];
+  for (let type of options) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return "video/webm";
 }
 
 function resizeCanvas() {
-    overlayCanvas.width = preview.videoWidth || window.innerWidth;
-    overlayCanvas.height = preview.videoHeight || window.innerHeight;
+  overlayCanvas.width = preview.videoWidth || window.innerWidth;
+  overlayCanvas.height = preview.videoHeight || window.innerHeight;
 }
 preview.addEventListener("loadedmetadata", resizeCanvas);
 window.addEventListener("resize", resizeCanvas);
@@ -91,116 +104,122 @@ let lastPosition = null;
 let speedKmh = 0;
 
 function drawOverlay() {
-    if (!preview.videoWidth) {
-        requestAnimationFrame(drawOverlay);
-        return;
-    }
+  if (!drawing) return; // stops when Stop button pressed
 
-    ctx.drawImage(preview, 0, 0, overlayCanvas.width, overlayCanvas.height);
+  ctx.drawImage(preview, 0, 0, overlayCanvas.width, overlayCanvas.height);
 
-    ctx.font = "22px Arial";
-    ctx.fillStyle = "yellow";
-    ctx.fillText(new Date().toLocaleString(), 10, 30);
-    ctx.fillText(`Speed: ${speedKmh.toFixed(1)} km/h`, 10, 65);
+  ctx.font = "26px Arial";
+  ctx.fillStyle = "yellow";
+  ctx.fillText(new Date().toLocaleString(), 12, 40);
+  ctx.fillText(`Speed: ${speedKmh.toFixed(1)} km/h`, 12, 80);
 
-    requestAnimationFrame(drawOverlay);
+  requestAnimationFrame(drawOverlay);
 }
 
 function watchSpeed() {
-    if (!navigator.geolocation) return;
+  if (!navigator.geolocation) return;
 
-    navigator.geolocation.watchPosition(
-        (pos) => {
-            const { latitude, longitude } = pos.coords;
-            const now = pos.timestamp;
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const now = pos.timestamp;
 
-            if (lastPosition) {
-                const { lat, lon, time } = lastPosition;
-                const R = 6371e3;
+      if (lastPosition) {
+        const R = 6371e3;
+        const toRad = v=>v*Math.PI/180;
+        const dLat = toRad(latitude - lastPosition.lat);
+        const dLon = toRad(longitude - lastPosition.lon);
 
-                const toRad = (v)=>v*Math.PI/180;
+        const a = Math.sin(dLat/2)**2 +
+          Math.cos(toRad(lastPosition.lat)) *
+          Math.cos(toRad(latitude)) *
+          Math.sin(dLon/2)**2;
 
-                const phi1 = toRad(lat);
-                const phi2 = toRad(latitude);
-                const dPhi = toRad(latitude - lat);
-                const dLambda = toRad(longitude - lon);
+        const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const distance = R*c;
+        const dt = (now - lastPosition.time)/1000;
 
-                const a = Math.sin(dPhi/2)**2 +
-                          Math.cos(phi1)*Math.cos(phi2)*Math.sin(dLambda/2)**2;
+        if (dt > 0) speedKmh = (distance/dt) * 3.6;
+      }
 
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                const distance = R * c;
-
-                const dt = (now - time)/1000;
-                if (dt > 0) speedKmh = (distance / dt) * 3.6;
-            }
-
-            lastPosition = { lat: latitude, lon: longitude, time: now };
-        },
-        (err)=>console.warn(err),
-        { enableHighAccuracy:true, maximumAge:1000, timeout:5000 }
-    );
+      lastPosition = { lat: latitude, lon: longitude, time: now };
+    },
+    (err)=>console.warn(err),
+    { enableHighAccuracy:true, maximumAge:1000, timeout:5000 }
+  );
 }
 
-// START BUTTON
-startBtn.addEventListener("click", async () => {
+// Main start logic with retry for iOS
+async function startRecording() {
+  try {
     mimeType = pickMimeType();
 
     stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode:"environment" },
-        audio: false
+      video: { facingMode:"environment" },
+      audio: false
     });
 
     preview.srcObject = stream;
     preview.style.display = "block";
     startBtn.style.display = "none";
     controls.style.display = "flex";
-
+    overlayCanvas.style.display = "block"; 
+    drawing = true;
     drawOverlay();
     watchSpeed();
 
     const combinedStream = overlayCanvas.captureStream(30);
-    stream.getTracks().forEach(track => combinedStream.addTrack(track));
+    stream.getTracks().forEach(t => combinedStream.addTrack(t));
 
     buffer = [];
     recorder = new MediaRecorder(combinedStream, { mimeType });
 
     recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-            buffer.push(e.data);
-            if (buffer.length > maxChunks) buffer.shift();
-        }
+      if (e.data.size > 0) {
+        buffer.push(e.data);
+        if (buffer.length > maxChunks) buffer.shift();
+      }
     };
-    
+
     recorder.start(5000);
-});
 
-// SAVE BUTTON – keeps recording, just saves last 5 min
+  } catch (err) {
+    alert("Camera access failed. Try tapping Start again.\n" + err);
+  }
+}
+
+startBtn.addEventListener("click", startRecording);
+
+// Save last 5 minutes
 saveBtn.addEventListener("click", () => {
-    if (buffer.length === 0) {
-        alert("No video recorded yet.");
-        return;
-    }
+  if (buffer.length === 0) {
+    alert("No video recorded yet.");
+    return;
+  }
 
-    const blob = new Blob(buffer, { type: mimeType });
-    const url = URL.createObjectURL(blob);
+  const blob = new Blob(buffer, { type: mimeType });
+  const url = URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
-    a.href = url;
-
-    let ext = mimeType.includes("mp4") ? "mp4" : "webm";
-    a.download = `dashcam_${new Date().toISOString()}.${ext}`;
-    a.click();
+  const a = document.createElement("a");
+  a.href = url;
+  let ext = mimeType.includes("mp4") ? "mp4" : "webm";
+  a.download = `dashcam_${new Date().toISOString()}.${ext}`;
+  a.click();
 });
 
-// STOP BUTTON – stop, reset, go back to Start screen
+// Stop button
 stopBtn.addEventListener("click", () => {
-    recorder.stop();
-    stream.getTracks().forEach(t => t.stop());
 
-    preview.style.display = "none";
-    controls.style.display = "none";
-    startBtn.style.display = "block";
+  drawing = false; // stop overlay animation
+  overlayCanvas.style.display = "none"; // hide overlay
+  speedKmh = 0; // reset speed
+
+  if (recorder) recorder.stop();
+  if (stream) stream.getTracks().forEach(t => t.stop());
+
+  preview.style.display = "none";
+  controls.style.display = "none";
+  startBtn.style.display = "block";
 });
 </script>
 
