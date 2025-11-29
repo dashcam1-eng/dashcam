@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
 <title>DashCam</title>
 
@@ -19,7 +19,7 @@ body {
   position:relative;
 }
 
-/* Video stays behind UI */
+/* Video behind UI */
 #preview {
   position:absolute; top:0; left:0;
   width:100%; height:auto;
@@ -27,19 +27,20 @@ body {
   z-index:1;
 }
 
-/* Overlay canvas (must be above video but under buttons) */
+/* Overlay canvas above video but under buttons */
 canvas {
   position:absolute;
   top:0; left:0;
   z-index:2;
+  pointer-events:none; /* allow touches through canvas */
 }
 
-/* Start Button */
+/* Start button */
 .center-start {
   position:absolute;
   top:50%; left:50%;
   transform:translate(-50%, -50%);
-  z-index:3;  /* Above everything */
+  z-index:3;
 }
 
 button {
@@ -55,7 +56,7 @@ button {
 /* Controls row */
 .controls {
   position:absolute;
-  bottom:40px;               /* Always bottom */
+  bottom:5vh;               /* always slightly above bottom */
   left:50%;
   transform:translateX(-50%);
   width:90%;
@@ -63,7 +64,7 @@ button {
   justify-content:center;
   gap:14px;
   display:none;
-  z-index:3;                 /* Above canvas */
+  z-index:3;
 }
 
 .control-btn {
@@ -76,6 +77,14 @@ button {
 
 #saveBtn { background:#007bff; color:white; }
 #stopBtn { background:#dc3545; color:white; }
+
+/* Small screen adjustments */
+@media(max-width:480px){
+  .control-btn, button{
+    padding:16px 22px;
+    font-size:18px;
+  }
+}
 </style>
 </head>
 
